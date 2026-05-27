@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-electron/
+release/
+build/
+out/
+
+# Test artifacts
+test-results/
+tests/e2e/test-results/
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+BUILD_LOG.md
+
+# Temporary test files
+test-ipc-stream.mjs
+
+# AI agent caches
+.claude-code-source/
+.opencode-source/
+
+# Firecrawl skill docs (not project source)
+.firecrawl/
+
+# Agent memory logs
+.remember/logs/
+
+# Project handoff (auto-generated, not source)
+PROJECT_SUMMARY.md
+
+# Config files with secrets
+litellm-config.yaml
