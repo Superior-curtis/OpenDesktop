@@ -125,6 +125,7 @@ contextBridge.exposeInMainWorld('electron', {
   glob: (pattern: string, cwd?: string) => ipcRenderer.invoke('fs:glob', pattern, cwd),
   grep: (pattern: string, include?: string) => ipcRenderer.invoke('fs:grep', pattern, include),
   webSearch: (query: string, numResults?: number) => ipcRenderer.invoke('fs:web-search', query, numResults),
+  webFetch: (url: string, maxLength?: number) => ipcRenderer.invoke('fs:web-fetch', url, maxLength),
 })
 
 contextBridge.exposeInMainWorld('api', {
@@ -135,6 +136,7 @@ contextBridge.exposeInMainWorld('api', {
   glob: (pattern: string, cwd?: string) => ipcRenderer.invoke('fs:glob', pattern, cwd),
   grep: (pattern: string, include?: string) => ipcRenderer.invoke('fs:grep', pattern, include),
   webSearch: (query: string, numResults?: number) => ipcRenderer.invoke('fs:web-search', query, numResults),
+  webFetch: (url: string, maxLength?: number) => ipcRenderer.invoke('fs:web-fetch', url, maxLength),
 })
 
 export interface ElectronAPI {

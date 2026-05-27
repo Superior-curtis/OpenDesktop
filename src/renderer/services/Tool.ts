@@ -460,10 +460,11 @@ export const WebFetchTool = buildTool({
   isConcurrencySafe: () => true,
   call: async (args, _context) => {
     try {
-      const response = await fetch(args.url)
-      const content = await response.text()
-      const truncated = args.max_length ? content.slice(0, args.max_length) : content
-      return { content: truncated, isError: false }
+      const result = await window.api.webFetch(args.url, args.max_length)
+      if (!result.success) {
+        return { content: `Failed to fetch: ${result.error}`, isError: true }
+      }
+      return { content: result.content || '', isError: false }
     } catch (error) {
       return {
         content: `Error fetching URL: ${error instanceof Error ? error.message : 'Unknown error'}`,

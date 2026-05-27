@@ -733,6 +733,50 @@ ipcMain.handle('fs:web-search', async (_event, query: string, numResults?: numbe
   }
 })
 
+ipcMain.handle('fs:web-fetch', async (_event, url: string, maxLength?: number) => {
+  try {
+    const apiKey = process.env.FIRECRAWL_API_KEY || 'fc-f78...0454'
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        url,
+        formats: ['markdown'],
+      }),
+    })
+
+    if (!response.ok) {
+      // Fallback: try direct fetch
+      try {
+        const directResponse = await fetch(url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; OpenDesktop/1.0)' },
+        })
+        const html = await directResponse.text()
+        // Simple HTML to text: strip tags
+        const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+        const truncated = maxLength ? text.slice(0, maxLength) : text.slice(0, 50000)
+        return { success: true, content: truncated }
+      } catch {
+        return { success: false, error: `Failed to fetch URL: ${url}` }
+      }
+    }
+
+    const data: any = await response.json()
+    const content = data.data?.markdown || data.data?.content || ''
+    const truncated = maxLength ? content.slice(0, maxLength) : content.slice(0, 50000)
+    return { success: true, content: truncated }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Fetch failed' }
+  }
+})
+
 // Start background agent on ready
 app.whenReady().then(() => {
   createWindow()
