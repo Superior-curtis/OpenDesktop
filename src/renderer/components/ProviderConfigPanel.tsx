@@ -5,8 +5,10 @@ import { ApiClient } from '../services/ApiClient'
 import { Zap, Plus, Trash2, Loader2, Key, Globe, Cpu } from 'lucide-react'
 
 const PROVIDER_TEMPLATES: Record<string, Omit<Provider, 'id' | 'apiKey'>> = {
+  anthropic: { name: 'Anthropic (Claude)', baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-4-20250514', providerType: 'anthropic' } as any,
   'opencode-zen': { name: 'OpenCode Zen', baseUrl: 'https://opencode.ai/zen/v1', model: 'opencode/deepseek-v4-flash-free' },
   'nvidia-nim': { name: 'NVIDIA NIM', baseUrl: 'https://integrate.api.nvidia.com', model: 'mistralai/mistral-large-3-675b-instruct-2512' },
+  openrouter: { name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'anthropic/claude-sonnet-4' },
   litellm: { name: 'LiteLLM (Local Proxy)', baseUrl: 'http://localhost:4000/v1', model: 'gpt-4o-mini' },
   ollama: { name: 'Ollama (Local)', baseUrl: 'http://localhost:11434', model: 'llama3.2' },
   'lm-studio': { name: 'LM Studio', baseUrl: 'http://localhost:1234/v1', model: 'local-model' },
@@ -47,12 +49,15 @@ export function ProviderConfigPanel() {
 
   const handleAddProvider = async () => {
     const template = PROVIDER_TEMPLATES[selectedTemplate]
-    const newProvider = {
+    const newProvider: any = {
       id: crypto.randomUUID(),
       name: selectedTemplate === 'custom' ? 'Custom' : template.name,
       baseUrl: selectedTemplate === 'custom' ? customBaseUrl : template.baseUrl,
       apiKey,
       model: selectedTemplate === 'custom' ? customModel : template.model,
+    }
+    if ((template as any).providerType) {
+      newProvider.providerType = (template as any).providerType
     }
     addProvider(newProvider)
     setActiveProvider(newProvider.id)
