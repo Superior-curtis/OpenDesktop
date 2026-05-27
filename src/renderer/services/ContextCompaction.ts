@@ -355,9 +355,51 @@ export interface ContextCollapseResult {
 }
 
 export function applyCollapsesIfNeeded(messages: Message[]): ContextCollapseResult {
-  // Placeholder for context collapse (granular archiving)
-  // In Claude Code, this is feature-gated and uses a commit log
-  return { messages, tokensFreed: 0 }
+  if (messages.length < 10) return { messages, tokensFreed: 0 }
+
+  let tokensFreed = 0
+  const COLLAPSE_THRESHOLD = 30 // collapse messages older than this many from the end
+  const MAX_TOOL_OUTPUT = 2000 // chars to keep from tool outputs
+
+  if (messages.length <= COLLAPSE_THRESHOLD) return { messages, tokensFreed: 0 }
+
+  const result: Message[] = []
+  const collapseCutoff = messages.length - COLLAPSE_THRESHOLD
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]
+
+    if (i < collapseCutoff) {
+      // Collapse old tool results: truncate long outputs
+      if (msg.role === 'user' && msg.toolCallId && msg.content.length > MAX_TOOL_OUTPUT) {
+        const originalTokens = estimateMessageTokens(msg)
+        const collapsed: Message = {
+          ...msg,
+          content: msg.content.slice(0, MAX_TOOL_OUTPUT) +
+            `\n\n[... ${msg.content.length - MAX_TOOL_OUTPUT} more characters truncated by context collapse]`,
+        }
+        tokensFreed += originalTokens - estimateMessageTokens(collapsed)
+        result.push(collapsed)
+        continue
+      }
+
+      // Collapse old thinking messages
+      if (msg.isThinking && msg.content.length > 500) {
+        const originalTokens = estimateMessageTokens(msg)
+        const collapsed: Message = {
+          ...msg,
+          content: `[Thinking: ${msg.content.slice(0, 200)}...]`,
+        }
+        tokensFreed += originalTokens - estimateMessageTokens(collapsed)
+        result.push(collapsed)
+        continue
+      }
+    }
+
+    result.push(msg)
+  }
+
+  return { messages: result, tokensFreed }
 }
 
 // ============================================================================
