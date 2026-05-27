@@ -507,6 +507,81 @@ export const WebSearchTool = buildTool({
 // Default Tool Pool
 // ============================================================================
 
+export const MemoryTool = buildTool({
+  name: 'Memory',
+  aliases: ['SaveMemory', 'UpdateMemory', 'DeleteMemory'],
+  description: 'Save, update, or delete information in persistent memory. Use this to remember user preferences, important facts, and project context across conversations.',
+  inputSchema: z.object({
+    action: z.enum(['save', 'update', 'delete', 'search']).describe('save: add new memory, update: replace existing, delete: remove, search: find memories'),
+    content: z.string().optional().describe('The memory content to save/update'),
+    category: z.enum(['fact', 'preference', 'instruction', 'context']).optional(),
+    query: z.string().optional().describe('Search query for finding memories'),
+    old_content: z.string().optional().describe('When updating/deleting, the old content to match'),
+  }),
+  isReadOnly: (input) => input.action === 'search',
+  isConcurrencySafe: () => false,
+  call: async (args, _context) => {
+    const state = _context.getAppState()
+    const memories: Array<{ id: string; content: string; category: string; createdAt: number }> = state?.memories || []
+
+    switch (args.action) {
+      case 'save': {
+        if (!args.content) return { content: 'Error: content is required for save', isError: true }
+        const newMemory = {
+          id: crypto.randomUUID(),
+          content: args.content,
+          category: args.category || 'fact',
+          createdAt: Date.now(),
+        }
+        _context.setAppState((prev: any) => ({
+          ...prev,
+          memories: [...(prev.memories || []), newMemory],
+        }))
+        return { content: `Memory saved: [${newMemory.category}] ${newMemory.content}`, isError: false }
+      }
+      case 'update': {
+        if (!args.content || !args.old_content) {
+          return { content: 'Error: content and old_content are required for update', isError: true }
+        }
+        const idx = memories.findIndex(m => m.content === args.old_content)
+        if (idx === -1) return { content: `Memory not found: "${args.old_content?.slice(0, 50)}..."`, isError: true }
+        const updated = { ...memories[idx], content: args.content, category: args.category || memories[idx].category }
+        const newMemories = [...memories]
+        newMemories[idx] = updated
+        _context.setAppState((prev: any) => ({ ...prev, memories: newMemories }))
+        return { content: `Memory updated: [${updated.category}] ${updated.content}`, isError: false }
+      }
+      case 'delete': {
+        if (!args.old_content) return { content: 'Error: old_content is required for delete', isError: true }
+        const idx = memories.findIndex(m => m.content === args.old_content)
+        if (idx === -1) return { content: `Memory not found: "${args.old_content?.slice(0, 50)}..."`, isError: true }
+        const removed = memories[idx]
+        _context.setAppState((prev: any) => ({
+          ...prev,
+          memories: prev.memories.filter((m: any) => m.content !== args.old_content),
+        }))
+        return { content: `Memory deleted: [${removed.category}] ${removed.content}`, isError: false }
+      }
+      case 'search': {
+        const q = (args.query || '').toLowerCase()
+        if (!q) {
+          const list = memories.map(m => `- [${m.category}] ${m.content}`).join('\n')
+          return { content: list || 'No memories stored yet.', isError: false }
+        }
+        const results = memories.filter(m =>
+          m.content.toLowerCase().includes(q) || m.category.toLowerCase().includes(q)
+        )
+        if (results.length === 0) return { content: `No memories matching "${args.query}"`, isError: false }
+        const list = results.map(m => `- [${m.category}] ${m.content}`).join('\n')
+        return { content: `Found ${results.length} memories:\n${list}`, isError: false }
+      }
+      default:
+        return { content: `Unknown action: ${args.action}`, isError: true }
+    }
+  },
+  toAutoClassifierInput: (input) => input.content ?? input.query ?? '',
+})
+
 export const DEFAULT_TOOLS: Tools = [
   ReadTool,
   WriteTool,
@@ -515,6 +590,7 @@ export const DEFAULT_TOOLS: Tools = [
   GlobTool,
   GrepTool,
   TodoWriteTool,
+  MemoryTool,
   AskUserQuestionTool,
   TaskTool,
   SkillTool,
