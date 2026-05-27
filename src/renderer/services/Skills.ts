@@ -77,17 +77,20 @@ export async function discoverSkillDirs(filePaths: string[], cwd: string): Promi
     let currentDir = filePath.replace(/[/\\][^/\\]*$/, '')
 
     while (currentDir.startsWith(cwd)) {
-      const skillDir = joinPath(currentDir, '.claude', 'skills')
+      // Support both .claude/skills and .opendesktop/skills
+      for (const skillDirName of ['.claude/skills', '.opendesktop/skills']) {
+        const skillDir = joinPath(currentDir, skillDirName)
 
-      if (!seen.has(skillDir)) {
-        seen.add(skillDir)
-        try {
-          const exists = await checkDirExists(skillDir)
-          if (exists) {
-            newDirs.push(skillDir)
+        if (!seen.has(skillDir)) {
+          seen.add(skillDir)
+          try {
+            const exists = await checkDirExists(skillDir)
+            if (exists) {
+              newDirs.push(skillDir)
+            }
+          } catch {
+            // Directory doesn't exist, skip
           }
-        } catch {
-          // Directory doesn't exist, skip
         }
       }
 

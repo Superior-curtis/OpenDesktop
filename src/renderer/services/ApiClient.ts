@@ -6,12 +6,14 @@ export class ApiClient {
   private apiKey: string
   private model: string
   private providerId: string
+  private providerType: string
 
   constructor(provider: Provider) {
     this.baseUrl = provider.baseUrl
     this.apiKey = provider.apiKey
     this.model = provider.model
     this.providerId = provider.id
+    this.providerType = (provider as any).providerType || 'openai-compatible'
   }
 
   private formatMessages(messages: Message[]): { role: string; content: any }[] {
@@ -89,6 +91,7 @@ export class ApiClient {
       apiKey: this.apiKey,
       body: JSON.stringify(body),
       stream,
+      providerType: this.providerType,
     })
 
     if (!response.success) {

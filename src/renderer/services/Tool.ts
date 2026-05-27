@@ -485,8 +485,14 @@ export const WebSearchTool = buildTool({
   isConcurrencySafe: () => true,
   call: async (args, _context) => {
     try {
-      const results = await window.api.webSearch(args.query, args.num_results || 5)
-      return { content: JSON.stringify(results, null, 2), isError: false }
+      const response = await window.api.webSearch(args.query, args.num_results || 5)
+      if (!response.success || !response.results) {
+        return { content: `Search failed: ${response.error || 'No results'}`, isError: true }
+      }
+      const formatted = response.results.map((r: any, i: number) =>
+        `${i + 1}. **${r.title}**\n   URL: ${r.url}\n   ${r.description}`
+      ).join('\n\n')
+      return { content: formatted, isError: false }
     } catch (error) {
       return {
         content: `Error searching web: ${error instanceof Error ? error.message : 'Unknown error'}`,

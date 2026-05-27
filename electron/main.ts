@@ -130,7 +130,18 @@ ipcMain.handle('get-platform', () => process.platform)
 ipcMain.handle('get-user-data-path', () => app.getPath('userData'))
 
 // IPC - API Proxy (fixes CORS)
-ipcMain.handle('api:chat', async (_event, { baseUrl, apiKey, body, stream }) => {
+ipcMain.handle('api:chat', async (_event, { baseUrl, apiKey, body, stream, providerType }) => {
+  // Route to provider-specific handlers
+  if (providerType === 'anthropic') {
+    return handleAnthropicChat(apiKey, body, stream)
+  }
+  if (providerType === 'bedrock') {
+    return handleBedrockChat(apiKey, body, stream)
+  }
+  return handleOpenAICompatibleChat(baseUrl, apiKey, body, stream)
+})
+
+async function handleOpenAICompatibleChat(baseUrl: string, apiKey: string, body: string, stream: boolean) {
   try {
     console.log(`[IPC] api:chat called stream=${stream}`)
     const url = baseUrl.endsWith('/v1') ? `${baseUrl}/chat/completions` : `${baseUrl}/v1/chat/completions`;
@@ -249,7 +260,114 @@ ipcMain.handle('api:chat', async (_event, { baseUrl, apiKey, body, stream }) => 
       error: error instanceof Error ? error.message : 'Unknown error',
     }
   }
-})
+}
+
+// Anthropic API handler
+async function handleAnthropicChat(apiKey: string, body: string, stream: boolean) {
+  try {
+    const parsed = JSON.parse(body)
+    console.log(`[IPC] anthropic chat stream=${stream} model=${parsed.model}`)
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: parsed.model,
+        messages: parsed.messages,
+        system: parsed.system,
+        max_tokens: parsed.max_tokens || 4096,
+        stream,
+        ...(parsed.temperature !== undefined ? { temperature: parsed.temperature } : {}),
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      return { success: false, error: `${response.status} - ${errorText}` }
+    }
+
+    if (!stream) {
+      const data: any = await response.json()
+      const content = data.content?.map((c: any) => c.text || '').join('') || ''
+      return { success: true, content }
+    }
+
+    // Streaming via SSE
+    const streamId = `stream-${++streamCounter}`
+    if (!response.body) {
+      return { success: false, error: 'No response body' }
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let isProcessing = false
+
+    const processStream = async () => {
+      if (isProcessing) return
+      isProcessing = true
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) {
+            mainWindow?.webContents.send('api:stream-data', { streamId, done: true })
+            activeStreams.delete(streamId)
+            break
+          }
+          buffer += decoder.decode(value, { stream: true })
+          while (true) {
+            const newlineIndex = buffer.indexOf('\n')
+            if (newlineIndex === -1) break
+            const line = buffer.slice(0, newlineIndex).trim()
+            buffer = buffer.slice(newlineIndex + 1)
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6)
+              // Anthropic SSE format: each event is a JSON object with type
+              try {
+                const parsed = JSON.parse(data)
+                // Convert to OpenAI-compatible SSE format for renderer compatibility
+                let chunk = ''
+                if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+                  chunk = `data: ${JSON.stringify({ choices: [{ delta: { content: parsed.delta.text } }] })}\n`
+                } else if (parsed.type === 'message_stop') {
+                  chunk = 'data: [DONE]\n'
+                }
+                if (chunk) {
+                  mainWindow?.webContents.send('api:stream-data', { streamId, chunk })
+                }
+              } catch {
+                // skip unparseable lines
+              }
+            }
+          }
+        }
+      } catch (error) {
+        mainWindow?.webContents.send('api:stream-data', { streamId, error: error instanceof Error ? error.message : 'Stream error' })
+        activeStreams.delete(streamId)
+      }
+    }
+
+    activeStreams.set(streamId, { abort: () => reader.cancel(), start: processStream })
+    return { success: true, streamId }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }
+  }
+}
+
+// Bedrock API handler (placeholder - requires AWS SDK)
+async function handleBedrockChat(_apiKey: string, _body: string, _stream: boolean) {
+  return {
+    success: false,
+    error: 'Bedrock provider requires AWS credentials. Set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION environment variables.',
+  }
+}
 
 // Renderer calls this AFTER registering its stream listener, guaranteeing no lost events
 ipcMain.handle('api:start-stream', async (_event, streamId) => {
@@ -355,14 +473,25 @@ ipcMain.handle('computer:get-screen-size', async () => {
 })
 
 // IPC - Terminal
-ipcMain.handle('terminal:execute', async (_event, command: string, shellType: string) => {
+ipcMain.handle('terminal:execute', async (_event, command: string, shellType?: string) => {
   return new Promise((resolve) => {
     if (terminalProcess) terminalProcess.kill()
 
-    const exe = shellType === 'powershell' ? 'powershell.exe' : 'cmd.exe'
-    const args = shellType === 'powershell'
-      ? ['-NoProfile', '-NonInteractive', '-Command', command]
-      : ['/c', command]
+    const isWindows = process.platform === 'win32'
+    let exe: string
+    let args: string[]
+
+    if (isWindows) {
+      exe = shellType === 'powershell' ? 'powershell.exe' : 'cmd.exe'
+      args = shellType === 'powershell'
+        ? ['-NoProfile', '-NonInteractive', '-Command', command]
+        : ['/c', command]
+    } else {
+      // macOS / Linux: prefer user's shell, fall back to bash
+      const userShell = process.env.SHELL || '/bin/bash'
+      exe = shellType === 'zsh' ? '/bin/zsh' : shellType === 'bash' ? '/bin/bash' : userShell
+      args = ['-c', command]
+    }
 
     terminalProcess = spawn(exe, args, { cwd: app.getPath('home'), env: process.env })
 
@@ -567,16 +696,40 @@ ipcMain.handle('fs:grep', async (_event, pattern: string, include?: string) => {
   }
 })
 
-ipcMain.handle('fs:web-search', async (_event, query: string) => {
+ipcMain.handle('fs:web-search', async (_event, query: string, numResults?: number) => {
   try {
-    const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; OpenDesktop/1.0)' },
+    const apiKey = process.env.FIRECRAWL_API_KEY || 'fc-f788322b7dad42d8bb78250df3a10454'
+    const limit = numResults || 5
+
+    const response = await fetch('https://api.firecrawl.dev/v1/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        query,
+        limit,
+        scrapeOptions: { formats: ['markdown'] },
+      }),
     })
-    const html = await response.text()
-    return { success: true, html }
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      return { success: false, error: `Firecrawl API error: ${response.status} - ${errorText}` }
+    }
+
+    const data: any = await response.json()
+    const results = (data.data || []).map((item: any) => ({
+      title: item.title || '',
+      url: item.url || '',
+      description: item.description || item.markdown?.slice(0, 300) || '',
+      markdown: item.markdown || '',
+    }))
+
+    return { success: true, results }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Search failed' }
+    return { success: false, error: error instanceof Error ? error.message : 'Search failed', results: [] }
   }
 })
 

@@ -27,6 +27,7 @@ export interface Provider {
   apiKey: string
   model: string
   availableModels?: string[]
+  providerType?: 'openai-compatible' | 'anthropic' | 'bedrock' | 'google'
 }
 
 export interface Memory {

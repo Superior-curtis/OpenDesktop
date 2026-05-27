@@ -10,7 +10,7 @@ contextBridge.exposeInMainWorld('electron', {
 
   // API Proxy (fixes CORS)
   api: {
-    chat: (params: any) => ipcRenderer.invoke('api:chat', params),
+    chat: (params: { baseUrl: string; apiKey: string; body: string; stream: boolean; providerType?: string }) => ipcRenderer.invoke('api:chat', params),
     testProvider: (params: any) => ipcRenderer.invoke('api:test-provider', params),
     abortStream: (streamId: string) => ipcRenderer.invoke('api:abort-stream', streamId),
     startStream: (streamId: string) => ipcRenderer.invoke('api:start-stream', streamId),
@@ -124,7 +124,7 @@ contextBridge.exposeInMainWorld('electron', {
   executeCommand: (command: string) => ipcRenderer.invoke('fs:execute-command', command),
   glob: (pattern: string, cwd?: string) => ipcRenderer.invoke('fs:glob', pattern, cwd),
   grep: (pattern: string, include?: string) => ipcRenderer.invoke('fs:grep', pattern, include),
-  webSearch: (query: string) => ipcRenderer.invoke('fs:web-search', query),
+  webSearch: (query: string, numResults?: number) => ipcRenderer.invoke('fs:web-search', query, numResults),
 })
 
 contextBridge.exposeInMainWorld('api', {
@@ -134,7 +134,7 @@ contextBridge.exposeInMainWorld('api', {
   executeCommand: (command: string) => ipcRenderer.invoke('fs:execute-command', command),
   glob: (pattern: string, cwd?: string) => ipcRenderer.invoke('fs:glob', pattern, cwd),
   grep: (pattern: string, include?: string) => ipcRenderer.invoke('fs:grep', pattern, include),
-  webSearch: (query: string) => ipcRenderer.invoke('fs:web-search', query),
+  webSearch: (query: string, numResults?: number) => ipcRenderer.invoke('fs:web-search', query, numResults),
 })
 
 export interface ElectronAPI {
@@ -142,7 +142,7 @@ export interface ElectronAPI {
   getPlatform: () => Promise<string>
   getUserDataPath: () => Promise<string>
   api: {
-    chat: (params: any) => Promise<any>
+    chat: (params: { baseUrl: string; apiKey: string; body: string; stream: boolean; providerType?: string }) => Promise<any>
     testProvider: (params: any) => Promise<any>
     abortStream: (streamId: string) => Promise<any>
     startStream: (streamId: string) => Promise<any>
@@ -209,7 +209,7 @@ export interface ElectronAPI {
   executeCommand: (command: string) => Promise<{ success: boolean; stdout?: string; stderr?: string; error?: string }>
   glob: (pattern: string, cwd?: string) => Promise<{ success: boolean; files?: string[]; error?: string }>
   grep: (pattern: string, include?: string) => Promise<{ success: boolean; results?: { file: string; line: number; content: string }[]; error?: string }>
-  webSearch: (query: string) => Promise<{ success: boolean; html?: string; error?: string }>
+  webSearch: (query: string, numResults?: number) => Promise<{ success: boolean; results?: { title: string; url: string; description: string; markdown: string }[]; error?: string }>
 }
 
 export interface FileSystemAPI {
@@ -218,7 +218,7 @@ export interface FileSystemAPI {
   executeCommand: (command: string) => Promise<{ success: boolean; stdout?: string; stderr?: string; error?: string }>
   glob: (pattern: string, cwd?: string) => Promise<{ success: boolean; files?: string[]; error?: string }>
   grep: (pattern: string, include?: string) => Promise<{ success: boolean; results?: { file: string; line: number; content: string }[]; error?: string }>
-  webSearch: (query: string) => Promise<{ success: boolean; html?: string; error?: string }>
+  webSearch: (query: string, numResults?: number) => Promise<{ success: boolean; results?: { title: string; url: string; description: string; markdown: string }[]; error?: string }>
 }
 
 declare global {

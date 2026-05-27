@@ -1,153 +1,110 @@
 # OpenDesktop
 
-An open-source AI desktop application that provides a Claude Desktop-like experience with support for multiple AI providers including NVIDIA NIM, Ollama, LM Studio, and any OpenAI-compatible API.
+An open-source AI agent desktop application — a Claude Code alternative that runs on Windows, macOS, and Linux. Supports multiple AI providers, MCP tools, sub-agents, skills, and computer use.
 
 ## Features
 
-### Phase 1 (MVP) - ✅ Complete
-- **Multi-provider support**: Configure and switch between AI providers
-- **Streaming responses**: Real-time token streaming from AI models
-- **Persistent storage**: Settings and chat history saved locally
-- **Clean UI**: Modern, responsive chat interface with TailwindCSS
+### Core
+- Multi-provider: Anthropic (direct API), OpenAI-compatible (NVIDIA NIM, Ollama, LM Studio, OpenRouter, custom), Bedrock-ready
+- Streaming responses with real-time token delivery
+- Persistent chat history and settings (local storage)
 
-### Coming Soon
-- **MCP Integration**: File system, terminal, and git operations
-- **Skill System**: Extensible commands and agent capabilities
-- **Browser Automation**: Playwright-powered web interaction
-- **Computer Use Agent**: Desktop automation with vision models
-- **Agent Creation**: Build custom agents with specific capabilities
+### Agent System
+- Sub-agent forking (explore, general, custom agents)
+- Agent orchestration with turn limits and permission control
+- Autonomous multi-step task execution
+
+### Tools (12 built-in)
+- Read, Write, FileEdit, Bash, Glob, Grep
+- TodoWrite, AskUserQuestion
+- Task (sub-agent spawning), Skill (skill invocation)
+- WebFetch, WebSearch (Firecrawl-powered)
+
+### MCP Integration
+- Full Model Context Protocol client (stdio, SSE, HTTP transports)
+- Tool discovery and execution from MCP servers
+- Resource and prompt support
+
+### Context Management
+- 5-layer context compaction pipeline (identical to Claude Code's approach)
+- Token budgeting, history snipping, microcompaction
+- Auto-compact with circuit breaker
+
+### Skills System
+- SKILL.md format with YAML frontmatter
+- Two-phase discovery (listing + content loading)
+- Supports .claude/skills and .opendesktop/skills directories
+- Agent and tool configuration via frontmatter
+
+### Computer Use
+- Screenshot capture, mouse control, keyboard input (via nut-js)
+- Clipboard read/write
+- Cross-platform desktop automation
+
+### UI
+- React + TailwindCSS with dark theme
+- Multi-panel layout (chat, tools, terminal, skills, settings)
+- File explorer, diff viewer, code highlighting
+- Session tabs, thinking panel, live tool calls
 
 ## Getting Started
 
 ### Prerequisites
-- Node.js 18+ installed
-- API key for your chosen AI provider (or local model setup)
+- Node.js 18+
+- API key for your chosen provider (or local model)
 
-### Installation
+### Quick Start
+```bash
+npm install
+npm run electron:dev
+```
 
-1. **Install dependencies**
-   ```bash
-   npm install
-   ```
+### Build
+```bash
+npm run electron:build
+```
 
-2. **Run in development mode**
-   ```bash
-   npm run electron:dev
-   ```
+## Provider Setup
 
-3. **Build for production**
-   ```bash
-   npm run electron:build
-   ```
+### Anthropic (Claude)
+Set providerType to "anthropic" and use your API key:
+- Base URL: `https://api.anthropic.com`
+- Model: `claude-sonnet-4-20250514`
+- API Key: Your Anthropic API key (sk-ant-...)
 
-## Configuration
+### OpenAI-compatible
+Works with any OpenAI-compatible endpoint:
+- NVIDIA NIM: `https://integrate.api.nvidia.com`
+- Ollama: `http://localhost:11434`
+- LM Studio: `http://localhost:1234/v1`
+- OpenRouter: `https://openrouter.ai/api/v1`
 
-### Adding a Provider
-
-Open the settings (gear icon) in the app and add a provider:
-
-#### NVIDIA NIM
-- **Base URL**: `https://integrate.api.nvidia.com`
-- **Model**: `meta/llama-3.1-8b-instruct` (or any NVIDIA model)
-- **API Key**: Your NVIDIA API key
-
-#### Ollama (Local)
-- **Base URL**: `http://localhost:11434`
-- **Model**: `llama3.2` (or any installed model)
-- **API Key**: Not required
-
-#### LM Studio
-- **Base URL**: `http://localhost:1234/v1`
-- **Model**: `local-model`
-- **API Key**: Not required
-
-#### Custom OpenAI-Compatible API
-- **Base URL**: Your API endpoint
-- **Model**: Your model name
-- **API Key**: Your API key
+### Web Search
+Set `FIRECRAWL_API_KEY` in environment or `.env` for web search capability.
 
 ## Project Structure
-
 ```
 opendesktop/
-├── electron/           # Electron main process
-│   ├── main.ts        # Main process entry
-│   └── preload.ts     # Preload script for IPC
+├── electron/           # Electron main process + IPC handlers
+│   ├── main.ts        # Main process: API routing, terminal, file ops
+│   ├── preload.ts     # Context bridge for renderer
+│   ├── skills/        # System + browser skill implementations
+│   └── mcp/           # MCP client transport layer
 ├── src/
+│   ├── core/io/       # Platform-agnostic I/O abstraction
+│   ├── cli/           # Headless CLI mode
 │   └── renderer/      # React application
-│       ├── components/
-│       │   ├── ChatInterface.tsx
-│       │   ├── MessageList.tsx
-│       │   └── SettingsModal.tsx
-│       ├── services/
-│       │   └── ApiClient.ts
-│       ├── store/
-│       │   └── chatStore.ts
-│       ├── types/
-│       │   └── index.ts
-│       └── App.tsx
-├── package.json
-└── vite.config.ts
+│       ├── components/ # 30+ UI components
+│       ├── services/   # 40+ service modules
+│       ├── store/      # Zustand state management
+│       └── types/      # TypeScript type definitions
+└── tests/             # Vitest + Playwright tests
 ```
 
-## Architecture
-
-### API Client
-The `ApiClient` class provides OpenAI-compatible API support:
-- Works with NVIDIA NIM, Ollama, LM Studio, and more
-- Streaming response support
-- Connection testing
-
-### State Management
-Zustand is used for state management with persistence:
-- Chat messages
-- Provider configurations
-- UI state
-
-### Security
-- API keys stored locally (electron-store with encryption coming)
-- No cloud dependency for core functionality
-- Context isolation in Electron
-
-## Roadmap
-
-### Phase 2: MCP + Skills
-- [ ] MCP client integration
-- [ ] File system operations
-- [ ] Terminal commands
-- [ ] Skill system architecture
-- [ ] Default skills implementation
-
-### Phase 3: Browser Automation
-- [ ] Playwright integration
-- [ ] Browser control tools
-- [ ] Content extraction
-- [ ] Web scraping skills
-
-### Phase 4: Computer Use Agent
-- [ ] Screen capture
-- [ ] Mouse/keyboard control
-- [ ] Vision model integration
-- [ ] Autonomous workflows
-
-### Phase 5: Agent System
-- [ ] Agent creation UI
-- [ ] Agent orchestration
-- [ ] Workflow definitions
-- [ ] Cowork mode
-
-## Development
-
-### Commands
-- `npm run dev` - Start Vite dev server
-- `npm run build` - Build React app
-- `npm run electron:dev` - Run Electron with hot reload
-- `npm run electron:build` - Build production package
+## Tech Stack
+- Electron 33 + React 19 + TypeScript 5.6
+- Vite 6 + TailwindCSS 3 + Zustand 5
+- MCP SDK, nut-js (computer use), Playwright (testing)
 
 ## License
-
-MIT License - See LICENSE file for details.
-
-## Contributing
-
-Contributions welcome! Please read our contributing guidelines before submitting PRs.
+MIT
