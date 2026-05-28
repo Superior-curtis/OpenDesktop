@@ -17,7 +17,7 @@ const TEMPLATES: Record<string, { name: string; url: string; model: string; type
 export function SettingsModal({ onClose }: { onClose: () => void }) {
   const { providers, addProvider, removeProvider, activeProviderId, setActiveProvider, settings, updateSettings } = useChatStore()
   const [tab, setTab] = useState<'providers' | 'general'>('providers')
-  const [template, setTemplate] = useState('anthropic')
+  const [template, setTemplate] = useState('opencode')
   const [apiKey, setApiKey] = useState('')
   const [customUrl, setCustomUrl] = useState('')
   const [customModel, setCustomModel] = useState('')
@@ -31,7 +31,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     setApiKey(''); setCustomUrl(''); setCustomModel('')
   }
 
-  const needsKey = template !== 'ollama'
+  const needsKey = template !== 'ollama' && template !== 'opencode'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
