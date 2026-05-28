@@ -50,3 +50,12 @@ PROJECT_SUMMARY.md
 
 # Config files with secrets
 litellm-config.yaml
+
+# Server build output
+dist-server/
+
+# Temp files
+_t
+_token.*
+_push.*
+push.sh
