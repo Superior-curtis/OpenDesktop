@@ -259,8 +259,7 @@ export const GrepTool = buildTool({
   call: async (args, context) => {
     try {
       const results = await window.api.grep(args.pattern, {
-        cwd: context.cwd,
-        path: args.path,
+        cwd: context.cwd || args.path,
         glob: args.glob,
         output_mode: args.output_mode || 'content',
       })

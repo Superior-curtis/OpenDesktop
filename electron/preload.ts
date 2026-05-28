@@ -123,7 +123,8 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.invoke('fs:write-file', filePath, content),
   executeCommand: (command: string) => ipcRenderer.invoke('fs:execute-command', command),
   glob: (pattern: string, cwd?: string) => ipcRenderer.invoke('fs:glob', pattern, cwd),
-  grep: (pattern: string, include?: string) => ipcRenderer.invoke('fs:grep', pattern, include),
+  grep: (pattern: string, options?: { cwd?: string; path?: string; glob?: string; output_mode?: string }) =>
+    ipcRenderer.invoke('fs:grep', pattern, options?.glob, options?.cwd),
   webSearch: (query: string, numResults?: number) => ipcRenderer.invoke('fs:web-search', query, numResults),
   webFetch: (url: string, maxLength?: number) => ipcRenderer.invoke('fs:web-fetch', url, maxLength),
 })
@@ -134,7 +135,8 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('fs:write-file', filePath, content),
   executeCommand: (command: string) => ipcRenderer.invoke('fs:execute-command', command),
   glob: (pattern: string, cwd?: string) => ipcRenderer.invoke('fs:glob', pattern, cwd),
-  grep: (pattern: string, include?: string) => ipcRenderer.invoke('fs:grep', pattern, include),
+  grep: (pattern: string, options?: { cwd?: string; path?: string; glob?: string; output_mode?: string }) =>
+    ipcRenderer.invoke('fs:grep', pattern, options?.glob, options?.cwd),
   webSearch: (query: string, numResults?: number) => ipcRenderer.invoke('fs:web-search', query, numResults),
   webFetch: (url: string, maxLength?: number) => ipcRenderer.invoke('fs:web-fetch', url, maxLength),
 })

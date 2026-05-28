@@ -6,6 +6,7 @@ import { Zap, Plus, Trash2, Loader2, Key, Globe, Cpu } from 'lucide-react'
 
 const PROVIDER_TEMPLATES: Record<string, Omit<Provider, 'id' | 'apiKey'>> = {
   anthropic: { name: 'Anthropic (Claude)', baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-4-20250514', providerType: 'anthropic' } as any,
+  bedrock: { name: 'AWS Bedrock', baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com', model: 'us.anthropic.claude-sonnet-4-20250514-v1:0', providerType: 'bedrock' } as any,
   'opencode-zen': { name: 'OpenCode Zen', baseUrl: 'https://opencode.ai/zen/v1', model: 'opencode/deepseek-v4-flash-free' },
   'nvidia-nim': { name: 'NVIDIA NIM', baseUrl: 'https://integrate.api.nvidia.com', model: 'mistralai/mistral-large-3-675b-instruct-2512' },
   openrouter: { name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'anthropic/claude-sonnet-4' },

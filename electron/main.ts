@@ -361,11 +361,99 @@ async function handleAnthropicChat(apiKey: string, body: string, stream: boolean
   }
 }
 
-// Bedrock API handler (placeholder - requires AWS SDK)
-async function handleBedrockChat(_apiKey: string, _body: string, _stream: boolean) {
-  return {
-    success: false,
-    error: 'Bedrock provider requires AWS credentials. Set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION environment variables.',
+// Bedrock API handler
+async function handleBedrockChat(_apiKey: string, body: string, stream: boolean) {
+  try {
+    const { BedrockRuntimeClient, ConverseStreamCommand, ConverseCommand } = await import('@aws-sdk/client-bedrock-runtime')
+
+    const parsed = JSON.parse(body)
+    const region = process.env.AWS_REGION || 'us-east-1'
+    const accessKeyId = process.env.AWS_ACCESS_KEY_ID
+    const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY
+
+    if (!accessKeyId || !secretAccessKey) {
+      return {
+        success: false,
+        error: 'Bedrock requires AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.',
+      }
+    }
+
+    const client = new BedrockRuntimeClient({
+      region,
+      credentials: { accessKeyId, secretAccessKey },
+    })
+
+    // Convert messages to Bedrock Converse format
+    const bedrockMessages = (parsed.messages || []).map((m: any) => ({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }],
+    }))
+
+    if (!stream) {
+      const command = new ConverseCommand({
+        modelId: parsed.model,
+        messages: bedrockMessages,
+        ...(parsed.system ? { system: [{ text: parsed.system }] } : {}),
+        inferenceConfig: {
+          maxTokens: parsed.max_tokens || 4096,
+          temperature: parsed.temperature,
+        },
+      })
+
+      const response = await client.send(command)
+      const content = response.output?.message?.content?.map((c: any) => c.text || '').join('') || ''
+      return { success: true, content }
+    }
+
+    // Streaming
+    const streamId = `stream-${++streamCounter}`
+    const command = new ConverseStreamCommand({
+      modelId: parsed.model,
+      messages: bedrockMessages,
+      ...(parsed.system ? { system: [{ text: parsed.system }] } : {}),
+      inferenceConfig: {
+        maxTokens: parsed.max_tokens || 4096,
+        temperature: parsed.temperature,
+      },
+    })
+
+    const response = await client.send(command)
+    const eventStream = response.stream
+
+    if (!eventStream) {
+      return { success: false, error: 'No stream in Bedrock response' }
+    }
+
+    const processStream = async () => {
+      try {
+        for await (const event of eventStream) {
+          if (event.contentBlockDelta?.delta?.text) {
+            const chunk = `data: ${JSON.stringify({ choices: [{ delta: { content: event.contentBlockDelta.delta.text } }] })}\n`
+            mainWindow?.webContents.send('api:stream-data', { streamId, chunk })
+          }
+          if (event.metadata) {
+            // End of stream
+            mainWindow?.webContents.send('api:stream-data', { streamId, chunk: 'data: [DONE]\n' })
+            mainWindow?.webContents.send('api:stream-data', { streamId, done: true })
+            activeStreams.delete(streamId)
+            return
+          }
+        }
+        mainWindow?.webContents.send('api:stream-data', { streamId, done: true })
+        activeStreams.delete(streamId)
+      } catch (error) {
+        mainWindow?.webContents.send('api:stream-data', { streamId, error: error instanceof Error ? error.message : 'Stream error' })
+        activeStreams.delete(streamId)
+      }
+    }
+
+    activeStreams.set(streamId, { abort: () => client.destroy(), start: processStream })
+    return { success: true, streamId }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Bedrock error',
+    }
   }
 }
 
@@ -673,10 +761,11 @@ ipcMain.handle('fs:glob', async (_event, pattern: string, cwd?: string) => {
   }
 })
 
-ipcMain.handle('fs:grep', async (_event, pattern: string, include?: string) => {
+ipcMain.handle('fs:grep', async (_event, pattern: string, include?: string, cwd?: string) => {
   try {
+    const searchDir = cwd || app.getPath('home')
     const globPattern = include || '**/*'
-    const files = await glob(globPattern, { cwd: app.getPath('home'), nodir: true, ignore: 'node_modules/**' })
+    const files = await glob(globPattern, { cwd: searchDir, nodir: true, ignore: 'node_modules/**' })
     const results: { file: string; line: number; content: string }[] = []
     const regex = new RegExp(pattern, 'i')
     for (const file of files.slice(0, 100)) {
