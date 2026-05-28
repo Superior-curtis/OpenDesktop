@@ -787,34 +787,52 @@ ipcMain.handle('fs:grep', async (_event, pattern: string, include?: string, cwd?
 
 ipcMain.handle('fs:web-search', async (_event, query: string, numResults?: number) => {
   try {
-    const apiKey = process.env.FIRECRAWL_API_KEY || 'fc-f788322b7dad42d8bb78250df3a10454'
+    // Use DuckDuckGo Lite — free, no API key needed
     const limit = numResults || 5
-
-    const response = await fetch('https://api.firecrawl.dev/v1/search', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        query,
-        limit,
-        scrapeOptions: { formats: ['markdown'] },
-      }),
+    const response = await fetch(`https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; OpenDesktop/1.0)' },
     })
+    const html = await response.text()
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      return { success: false, error: `Firecrawl API error: ${response.status} - ${errorText}` }
+    // Parse DDG Lite results
+    const results: { title: string; url: string; description: string }[] = []
+    const linkRegex = /<a[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/gi
+    const snippetRegex = /<td class="result-snippet"[^>]*>([\s\S]*?)<\/td>/gi
+    let match
+    const links: { url: string; title: string }[] = []
+    while ((match = linkRegex.exec(html)) !== null) {
+      const url = match[1]
+      const title = match[2].replace(/<[^>]+>/g, '').trim()
+      if (url.startsWith('http') && title && !url.includes('duckduckgo.com')) {
+        links.push({ url, title })
+      }
     }
 
-    const data: any = await response.json()
-    const results = (data.data || []).map((item: any) => ({
-      title: item.title || '',
-      url: item.url || '',
-      description: item.description || item.markdown?.slice(0, 300) || '',
-      markdown: item.markdown || '',
-    }))
+    const snippets: string[] = []
+    while ((match = snippetRegex.exec(html)) !== null) {
+      snippets.push(match[1].replace(/<[^>]+>/g, '').trim())
+    }
+
+    for (let i = 0; i < Math.min(links.length, snippets.length, limit); i++) {
+      results.push({
+        title: links[i].title,
+        url: links[i].url,
+        description: snippets[i].slice(0, 300),
+      })
+    }
+
+    if (results.length === 0) {
+      // Fallback: try DuckDuckGo Instant Answer API
+      const iaResponse = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`)
+      const iaData: any = await iaResponse.json()
+      if (iaData.AbstractText) {
+        results.push({
+          title: iaData.Heading || query,
+          url: iaData.AbstractURL || `https://duckduckgo.com/?q=${encodeURIComponent(query)}`,
+          description: iaData.AbstractText.slice(0, 300),
+        })
+      }
+    }
 
     return { success: true, results }
   } catch (error) {
@@ -824,42 +842,18 @@ ipcMain.handle('fs:web-search', async (_event, query: string, numResults?: numbe
 
 ipcMain.handle('fs:web-fetch', async (_event, url: string, maxLength?: number) => {
   try {
-    const apiKey = process.env.FIRECRAWL_API_KEY || 'fc-f78...0454'
-    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        url,
-        formats: ['markdown'],
-      }),
+    // Direct fetch — free, no API key needed
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; OpenDesktop/1.0)' },
     })
-
-    if (!response.ok) {
-      // Fallback: try direct fetch
-      try {
-        const directResponse = await fetch(url, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; OpenDesktop/1.0)' },
-        })
-        const html = await directResponse.text()
-        // Simple HTML to text: strip tags
-        const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim()
-        const truncated = maxLength ? text.slice(0, maxLength) : text.slice(0, 50000)
-        return { success: true, content: truncated }
-      } catch {
-        return { success: false, error: `Failed to fetch URL: ${url}` }
-      }
-    }
-
-    const data: any = await response.json()
-    const content = data.data?.markdown || data.data?.content || ''
-    const truncated = maxLength ? content.slice(0, maxLength) : content.slice(0, 50000)
+    const html = await response.text()
+    // Simple HTML to text: strip tags
+    const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    const truncated = maxLength ? text.slice(0, maxLength) : text.slice(0, 50000)
     return { success: true, content: truncated }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Fetch failed' }
