@@ -1,15 +1,8 @@
 // Vercel serverless API entry point
-// Wraps Express app for Vercel's Node.js runtime
 
 import express from 'express'
 import cors from 'cors'
 import path from 'path'
-import { execFile } from 'child_process'
-import { readFile, writeFile } from 'fs/promises'
-import { promisify } from 'util'
-import { glob } from 'glob'
-
-const execAsync = promisify(execFile)
 const app = express()
 
 app.use(cors())
