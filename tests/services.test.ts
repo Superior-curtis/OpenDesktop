@@ -738,6 +738,7 @@ import {
   estimateTokens,
   shouldAutoCompact,
   getAutoCompactThreshold,
+  applyCollapsesIfNeeded,
 } from '@/renderer/services/ContextCompaction'
 import type { Message } from '@/renderer/types'
 
@@ -799,6 +800,56 @@ describe('ContextCompaction', () => {
 
     it('returns false for empty messages', () => {
       expect(shouldAutoCompact([], 'sonnet', true)).toBe(false)
+    })
+  })
+
+  describe('getAutoCompactThreshold', () => {
+    it('returns a threshold less than the effective context window', () => {
+      const threshold = getAutoCompactThreshold('sonnet')
+      expect(threshold).toBeLessThan(200000)
+      expect(threshold).toBeGreaterThan(0)
+    })
+  })
+
+  describe('applyCollapsesIfNeeded', () => {
+    function makeMessages(count: number, contentLength: number = 100): Message[] {
+      const msgs: Message[] = []
+      for (let i = 0; i < count; i++) {
+        msgs.push({
+          id: `msg-${i}`,
+          role: i % 2 === 0 ? 'user' : 'assistant',
+          content: 'x'.repeat(contentLength),
+          timestamp: Date.now() + i,
+        })
+      }
+      return msgs
+    }
+
+    it('skips short conversations', () => {
+      const msgs = makeMessages(5, 100)
+      const result = applyCollapsesIfNeeded(msgs)
+      expect(result.tokensFreed).toBe(0)
+      expect(result.messages).toEqual(msgs)
+    })
+
+    it('truncates long tool outputs in old messages', () => {
+      const msgs = makeMessages(40, 100)
+      msgs[0] = {
+        ...msgs[0],
+        role: 'user',
+        toolCallId: 'tool-1',
+        content: 'x'.repeat(5000),
+      }
+      const result = applyCollapsesIfNeeded(msgs)
+      expect(result.tokensFreed).toBeGreaterThan(0)
+      expect(result.messages[0].content.length).toBeLessThan(5000)
+    })
+
+    it('truncates old thinking messages', () => {
+      const msgs = makeMessages(40, 100)
+      msgs[0] = { ...msgs[0], isThinking: true, content: 'thinking '.repeat(200) }
+      const result = applyCollapsesIfNeeded(msgs)
+      expect(result.tokensFreed).toBeGreaterThan(0)
     })
   })
 
