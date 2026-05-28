@@ -303,6 +303,38 @@ export class PluginManager {
     } catch { /* ignore parse errors */ }
   }
 
+  // Scan a directory for plugin manifest.json files
+  async scanDirectory(dir: string): Promise<number> {
+    try {
+      if (typeof window === 'undefined' || !(window as any).api?.glob) return 0
+      const globResult = await (window as any).api.glob('*/manifest.json', dir)
+      if (!Array.isArray(globResult) || globResult.length === 0) return 0
+
+      let loaded = 0
+      for (const relPath of globResult) {
+        try {
+          const parts = relPath.replace(/\\/g, '/').split('/')
+          const pluginName = parts[parts.length - 2]
+          const filePath = `${dir}/${relPath}`
+          const content = await (window as any).api.readFile(filePath)
+          if (!content) continue
+
+          const manifest: PluginManifest = JSON.parse(content)
+          manifest.name = manifest.name || pluginName
+
+          const existing = this.plugins.get(manifest.name)
+          if (existing?.isBuiltin) continue
+
+          await this.install(manifest, 'project')
+          loaded++
+        } catch { /* skip broken plugins */ }
+      }
+      return loaded
+    } catch {
+      return 0
+    }
+  }
+
   // Get hooks config for system prompt injection
   getHooksForPrompt(): string {
     const hooks = this.getEnabled()
