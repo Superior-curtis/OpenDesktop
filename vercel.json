@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run build && npm run build:server",
+  "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
@@ -7,8 +7,8 @@
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "functions": {
-    "api/**/*.ts": {
-      "runtime": "nodejs20.x",
+    "api/index.ts": {
+      "runtime": "@vercel/node@5",
       "maxDuration": 30
     }
   }
