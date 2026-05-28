@@ -3,7 +3,11 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import { getJobManager, getJobProcessor, registerBuiltinHandlers } from './services/BackgroundJobs'
 import { getConfigResolver } from './services/ConfigResolver'
+import { setupBrowserMode } from './services/BrowserPolyfill'
 import './index.css'
+
+// Setup browser mode polyfill before anything else
+setupBrowserMode()
 
 // Apply theme before render
 try {

@@ -787,25 +787,31 @@ ipcMain.handle('fs:grep', async (_event, pattern: string, include?: string, cwd?
 
 ipcMain.handle('fs:web-search', async (_event, query: string, numResults?: number) => {
   try {
-    // Use DuckDuckGo Lite — free, no API key needed
+    // DuckDuckGo Lite — free, no API key, POST required
     const limit = numResults || 5
-    const response = await fetch(`https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; OpenDesktop/1.0)' },
+    const response = await fetch('https://lite.duckduckgo.com/lite/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (compatible; OpenDesktop/1.0)',
+      },
+      body: `q=${encodeURIComponent(query)}`,
     })
     const html = await response.text()
 
     // Parse DDG Lite results
     const results: { title: string; url: string; description: string }[] = []
-    const linkRegex = /<a[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/gi
-    const snippetRegex = /<td class="result-snippet"[^>]*>([\s\S]*?)<\/td>/gi
-    let match
+    // Find result links: <a rel="nofollow" href="URL" class='result-link'>TITLE</a>
+    const linkRegex = /<a[^>]*href="([^"]*)"[^>]*class='result-link'[^>]*>([^<]*)<\/a>/gi
+    // Find snippets: <td class='result-snippet'>CONTENT</td>
+    const snippetRegex = /<td class='result-snippet'>([\s\S]*?)<\/td>/gi
+
     const links: { url: string; title: string }[] = []
+    let match
     while ((match = linkRegex.exec(html)) !== null) {
       const url = match[1]
       const title = match[2].replace(/<[^>]+>/g, '').trim()
-      if (url.startsWith('http') && title && !url.includes('duckduckgo.com')) {
-        links.push({ url, title })
-      }
+      if (url && title) links.push({ url, title })
     }
 
     const snippets: string[] = []
@@ -817,20 +823,30 @@ ipcMain.handle('fs:web-search', async (_event, query: string, numResults?: numbe
       results.push({
         title: links[i].title,
         url: links[i].url,
-        description: snippets[i].slice(0, 300),
+        description: snippets[i]?.slice(0, 300) || '',
       })
     }
 
+    // Fallback: DuckDuckGo Instant Answer API
     if (results.length === 0) {
-      // Fallback: try DuckDuckGo Instant Answer API
       const iaResponse = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`)
       const iaData: any = await iaResponse.json()
       if (iaData.AbstractText) {
         results.push({
           title: iaData.Heading || query,
-          url: iaData.AbstractURL || `https://duckduckgo.com/?q=${encodeURIComponent(query)}`,
+          url: iaData.AbstractURL || '',
           description: iaData.AbstractText.slice(0, 300),
         })
+      }
+      // Add related topics as additional results
+      for (const topic of (iaData.RelatedTopics || []).slice(0, limit - results.length)) {
+        if (topic.Text && topic.FirstURL) {
+          results.push({
+            title: topic.Text.split(' - ')[0]?.slice(0, 100) || topic.Text.slice(0, 100),
+            url: topic.FirstURL,
+            description: topic.Text.slice(0, 300),
+          })
+        }
       }
     }
 

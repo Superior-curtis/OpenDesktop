@@ -14,7 +14,8 @@ app.use(cors())
 app.use(express.json({ limit: '10mb' }))
 
 // Serve static frontend
-const distPath = path.join(__dirname, '..', 'dist')
+// Serve static frontend (compiled __dirname is dist-server/server/, so go up 2 levels)
+const distPath = path.resolve(__dirname, '..', '..', 'dist')
 app.use(express.static(distPath))
 
 // ============================================================================
@@ -147,7 +148,7 @@ app.post('/api/anthropic-chat', async (req: any, res: any) => {
 })
 
 // ============================================================================
-// Web Search — DuckDuckGo (free)
+// Web Search — DuckDuckGo (free, POST)
 // ============================================================================
 app.get('/api/web-search', async (req: any, res: any) => {
   try {
@@ -155,25 +156,43 @@ app.get('/api/web-search', async (req: any, res: any) => {
     const limit = parseInt(req.query.n) || 5
     if (!query) return res.json({ results: [] })
 
-    const ddgRes = await fetch(`https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; OpenDesktop/1.0)' },
+    const ddgRes = await fetch('https://lite.duckduckgo.com/lite/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (compatible; OpenDesktop/1.0)',
+      },
+      body: `q=${encodeURIComponent(query)}`,
     })
     const html = await ddgRes.text()
 
     const results: any[] = []
-    const linkRegex = /<a[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/gi
-    const snippetRegex = /<td class="result-snippet"[^>]*>([\s\S]*?)<\/td>/gi
+    const linkRegex = /<a[^>]*href="([^"]*)"[^>]*class='result-link'[^>]*>([^<]*)<\/a>/gi
+    const snippetRegex = /<td class='result-snippet'>([\s\S]*?)<\/td>/gi
     const links: { url: string; title: string }[] = []
     let m
     while ((m = linkRegex.exec(html)) !== null) {
       const url = m[1], title = m[2].replace(/<[^>]+>/g, '').trim()
-      if (url.startsWith('http') && title && !url.includes('duckduckgo.com')) links.push({ url, title })
+      if (url && title) links.push({ url, title })
     }
     const snippets: string[] = []
     while ((m = snippetRegex.exec(html)) !== null) snippets.push(m[1].replace(/<[^>]+>/g, '').trim())
     for (let i = 0; i < Math.min(links.length, snippets.length, limit); i++) {
-      results.push({ title: links[i].title, url: links[i].url, description: snippets[i].slice(0, 300) })
+      results.push({ title: links[i].title, url: links[i].url, description: snippets[i]?.slice(0, 300) || '' })
     }
+
+    // Fallback: Instant Answer API
+    if (results.length === 0) {
+      const iaRes = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`)
+      const iaData: any = await iaRes.json()
+      if (iaData.AbstractText) {
+        results.push({ title: iaData.Heading || query, url: iaData.AbstractURL || '', description: iaData.AbstractText.slice(0, 300) })
+      }
+      for (const t of (iaData.RelatedTopics || []).slice(0, limit - results.length)) {
+        if (t.Text && t.FirstURL) results.push({ title: t.Text.split(' - ')[0]?.slice(0, 100) || t.Text.slice(0, 100), url: t.FirstURL, description: t.Text.slice(0, 300) })
+      }
+    }
+
     res.json({ results })
   } catch (err: any) {
     res.status(500).json({ error: err.message, results: [] })
