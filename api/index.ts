@@ -129,6 +129,28 @@ export default async function handler(req: any, res: any) {
       return res.json({ content })
     }
 
+    // Google Gemini chat (free tier — no credit card needed)
+    if (path === '/api/google-chat' && req.method === 'POST') {
+      const { apiKey, body } = req.body || {}
+      const parsed = typeof body === 'string' ? JSON.parse(body) : body
+      const model = parsed.model || 'gemini-2.0-flash'
+
+      const contents = (parsed.messages || []).map((m: any) => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }],
+      }))
+      const reqBody: any = { contents, generationConfig: { maxOutputTokens: parsed.max_tokens || 4096 } }
+      if (parsed.system) reqBody.systemInstruction = { parts: [{ text: parsed.system }] }
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody),
+      })
+      if (!response.ok) { const err = await response.text(); return res.status(response.status).json({ error: err }) }
+      const data: any = await response.json()
+      const text = data.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || ''
+      return res.json({ content: text })
+    }
+
     // 404
     return res.status(404).json({ error: 'Not found' })
   } catch (err: any) {

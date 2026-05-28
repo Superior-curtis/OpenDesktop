@@ -138,6 +138,9 @@ ipcMain.handle('api:chat', async (_event, { baseUrl, apiKey, body, stream, provi
   if (providerType === 'bedrock') {
     return handleBedrockChat(apiKey, body, stream)
   }
+  if (providerType === 'google') {
+    return handleGoogleChat(apiKey, body, stream)
+  }
   return handleOpenAICompatibleChat(baseUrl, apiKey, body, stream)
 })
 
@@ -454,6 +457,96 @@ async function handleBedrockChat(_apiKey: string, body: string, stream: boolean)
       success: false,
       error: error instanceof Error ? error.message : 'Bedrock error',
     }
+  }
+}
+
+// Google Gemini API handler (free tier — no credit card needed)
+async function handleGoogleChat(apiKey: string, body: string, stream: boolean) {
+  try {
+    const parsed = JSON.parse(body)
+    const model = parsed.model || 'gemini-2.0-flash'
+
+    // Convert messages to Gemini format
+    const contents = (parsed.messages || []).map((m: any) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }],
+    }))
+
+    const requestBody: any = {
+      contents,
+      generationConfig: {
+        maxOutputTokens: parsed.max_tokens || 4096,
+        temperature: parsed.temperature,
+      },
+    }
+
+    if (parsed.system) {
+      requestBody.systemInstruction = { parts: [{ text: parsed.system }] }
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${stream ? 'streamGenerateContent' : 'generateContent'}?key=${apiKey}`
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    })
+
+    if (!response.ok) {
+      const err = await response.text()
+      return { success: false, error: `${response.status} - ${err}` }
+    }
+
+    if (!stream) {
+      const data: any = await response.json()
+      const text = data.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || ''
+      return { success: true, content: text }
+    }
+
+    // Streaming — Gemini returns JSON lines
+    const streamId = `stream-${++streamCounter}`
+    if (!response.body) return { success: false, error: 'No response body' }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    const processStream = async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) {
+            mainWindow?.webContents.send('api:stream-data', { streamId, done: true })
+            activeStreams.delete(streamId)
+            break
+          }
+          buffer += decoder.decode(value, { stream: true })
+          while (true) {
+            const newlineIndex = buffer.indexOf('\n')
+            if (newlineIndex === -1) break
+            const line = buffer.slice(0, newlineIndex).trim()
+            buffer = buffer.slice(newlineIndex + 1)
+            if (!line || line === '[' || line === ']') continue
+            try {
+              const item = JSON.parse(line.replace(/^,/, ''))
+              const text = item.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || ''
+              if (text) {
+                const chunk = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n`
+                mainWindow?.webContents.send('api:stream-data', { streamId, chunk })
+              }
+            } catch { /* skip */ }
+          }
+        }
+      } catch (error) {
+        mainWindow?.webContents.send('api:stream-data', { streamId, error: error instanceof Error ? error.message : 'Stream error' })
+        activeStreams.delete(streamId)
+      }
+    }
+
+    activeStreams.set(streamId, { abort: () => reader.cancel(), start: processStream })
+    return { success: true, streamId }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Google API error' }
   }
 }
 
