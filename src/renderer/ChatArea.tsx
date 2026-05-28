@@ -60,8 +60,14 @@ export function ChatArea() {
         }
       }
     } catch (err: any) {
+      const msg = err?.message || String(err)
+      const detail = msg.includes('401') ? 'Invalid API key. Check Settings → Providers.' :
+                     msg.includes('403') ? 'Access denied. Check your API key permissions.' :
+                     msg.includes('429') ? 'Rate limited. Wait a moment and try again.' :
+                     msg.includes('Failed to fetch') ? 'Cannot connect to API. Check your internet and provider URL.' :
+                     msg
       if (err.name !== 'AbortError') {
-        updateMessage(assistantMsg.id, `Error: ${err.message || 'Unknown error'}`)
+        updateMessage(assistantMsg.id, `Error: ${detail}`)
       }
     } finally {
       setStreaming(false)

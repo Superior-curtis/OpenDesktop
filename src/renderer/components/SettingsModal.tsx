@@ -2,15 +2,15 @@ import { useState } from 'react'
 import { useChatStore } from '../store/chatStore'
 import { X, Plus, Trash2, Key, Globe, Cpu, Sun, Moon } from 'lucide-react'
 
-const TEMPLATES: Record<string, { name: string; url: string; model: string; type?: string }> = {
+const TEMPLATES: Record<string, { name: string; url: string; model: string; type?: string; free?: boolean }> = {
   anthropic: { name: 'Anthropic Claude', url: 'https://api.anthropic.com', model: 'claude-sonnet-4-20250514', type: 'anthropic' },
-  google: { name: 'Google Gemini (Free)', url: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.0-flash', type: 'google' },
+  google: { name: 'Google Gemini Free', url: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.0-flash', type: 'google', free: true },
   opencode: { name: 'OpenCode Zen', url: 'https://opencode.ai/zen/v1', model: 'opencode/deepseek-v4-flash-free' },
   nvidia: { name: 'NVIDIA NIM', url: 'https://integrate.api.nvidia.com', model: 'mistralai/mistral-large-3-675b-instruct-2512' },
   openrouter: { name: 'OpenRouter', url: 'https://openrouter.ai/api/v1', model: 'anthropic/claude-sonnet-4' },
   openai: { name: 'OpenAI', url: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
   bedrock: { name: 'AWS Bedrock', url: 'https://bedrock-runtime.us-east-1.amazonaws.com', model: 'us.anthropic.claude-sonnet-4-20250514-v1:0', type: 'bedrock' },
-  ollama: { name: 'Ollama Local', url: 'http://localhost:11434', model: 'llama3.2' },
+  ollama: { name: 'Ollama Local', url: 'http://localhost:11434', model: 'llama3.2', free: true },
   custom: { name: 'Custom API', url: '', model: '' },
 }
 
@@ -24,14 +24,14 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
   const handleAdd = () => {
     const t = TEMPLATES[template]
-    const provider: any = { id: crypto.randomUUID(), name: t.name, baseUrl: template === 'custom' ? customUrl : t.url, apiKey: apiKey || 'not-needed', model: template === 'custom' ? customModel : t.model }
+    const provider: any = { id: crypto.randomUUID(), name: t.name, baseUrl: template === 'custom' ? customUrl : t.url, apiKey: apiKey || '', model: template === 'custom' ? customModel : t.model }
     if (t.type) provider.providerType = t.type
     addProvider(provider)
     if (!activeProviderId) setActiveProvider(provider.id)
     setApiKey(''); setCustomUrl(''); setCustomModel('')
   }
 
-  const needsKey = template !== 'ollama' && template !== 'opencode'
+  const needsKey = !TEMPLATES[template].free
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
